@@ -5,9 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-
-Camera2D g_camera;
-
 typedef struct Invader
 {
     Vector2 position;
@@ -42,6 +39,14 @@ typedef struct Food
 Invader g_invader;
 Clumpnugget g_clumpnuggets[100];
 Food g_food[1000];
+Camera2D g_camera;
+
+enum GameState
+{
+    GameWin,
+    GameLose,
+    InGame
+} g_game_state;
 
 const float g_invader_start_radius = 30.0f;
 const float g_clump_nugget_radius = 10.0f;
@@ -49,9 +54,13 @@ const float g_clump_nugget_speed = 10.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
 const int g_screen_height = 1000;
-const float g_embed_distance = 2.0f;
+const float g_embed_distance = -5.0f;
 const float g_friction = 0.98f;
+const float g_hunger_timer_reset = 15.0f;
 int g_food_consumed = 0;
+float g_target_radius = 0.0f;
+float g_hunger_timer = 0.0f;
+int g_difficulty = 1;
 
 #ifdef NDEBUG
 const bool g_debug_mode = false;
@@ -68,6 +77,7 @@ void UpdateCamera2D(const float frame_time);
 void UpdateInvader(const float frame_time);
 void UpdateClumpnuggets(const float frame_time);
 void UpdateFood(const float frame_time);
+void UpdateGameState(const float frame_time);
 void Render(const float frame_time);
 void RenderWorld(const float frame_time);
 void RenderInvader();
@@ -130,14 +140,24 @@ void InitializeGameSpecifics()
         g_food[i].position = (Vector2){(float)GetRandomValue(-5000, 5000), (float)GetRandomValue(-5000, 5000)};
         g_food[i].consumed = false;
     }
+    
+    ++g_difficulty;
+    g_target_radius = g_invader_start_radius * (float)g_difficulty;
+    g_game_state = InGame;
+    g_hunger_timer = g_hunger_timer_reset;
 }
 
 void Update(const float frame_time)
 {
-    UpdateCamera2D(frame_time);
-    UpdateInvader(frame_time);
-    UpdateClumpnuggets(frame_time);
-    UpdateFood(frame_time);
+    UpdateGameState(frame_time);
+
+    if(g_game_state == InGame)
+    {
+        UpdateCamera2D(frame_time);
+        UpdateInvader(frame_time);
+        UpdateClumpnuggets(frame_time);
+        UpdateFood(frame_time);
+    }
 }
 
 void UpdateCamera2D(const float frame_time)
@@ -174,6 +194,7 @@ void UpdateClumpnuggets(const float frame_time)
     {
         if(g_clumpnuggets[i].attached)
         {
+            g_clumpnuggets[i].attach_position = Vector2Scale(Vector2Normalize(g_clumpnuggets[i].attach_position), g_invader.radius - g_embed_distance);
             g_clumpnuggets[i].position = Vector2Add(g_clumpnuggets[i].attach_position, g_invader.position);
             continue;
         }
@@ -221,6 +242,11 @@ void UpdateFood(const float frame_time)
 
         g_food[i].velocity = Vector2Scale(g_food[i].velocity, g_friction);
         g_food[i].position = Vector2Add(g_food[i].position, Vector2Scale(g_food[i].velocity, frame_time));
+        g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_food[i].position, g_food_radius);
+        
+        int last_consumed = g_food_consumed;
+        g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
+        g_hunger_timer = g_food_consumed > last_consumed ? g_hunger_timer_reset : g_hunger_timer;
 
         // food can't be consumed if a clumpnugget is attached and in the way
         for(int j = 0; j < _countof(g_clumpnuggets); ++j)
@@ -236,11 +262,15 @@ void UpdateFood(const float frame_time)
                 const float amount = Vector2DotProduct(direction, Vector2Normalize(g_invader.velocity));
                 g_food[i].velocity = Vector2Scale(direction, Vector2Distance(g_invader.velocity, Vector2Zero()) * amount);
             }
-
-            g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_food[i].position, g_food_radius);
-            g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
         }
     }
+}
+
+void UpdateGameState(const float frame_time)
+{
+    g_hunger_timer -= frame_time;
+    g_game_state = g_target_radius <= g_invader.radius ? GameWin : g_game_state;
+    g_game_state = g_hunger_timer <= 0.0f ? GameLose : g_game_state;
 }
 
 void Render(const float frame_time)
@@ -265,7 +295,9 @@ void RenderWorld(const float frame_time)
 
 void RenderInvader()
 {
-    DrawCircleV(g_invader.position, g_invader.radius, RED);
+    const float brightness = Lerp(0.0f, -1.0f, 1.0f - g_hunger_timer / g_hunger_timer_reset);
+    DrawCircleV(g_invader.position, g_invader.radius, ColorBrightness(RED, brightness));
+    DrawCircleLinesV(g_invader.position, g_target_radius, ORANGE);
 }
 
 void RenderClumpnuggets()
@@ -292,7 +324,6 @@ void RenderFood()
 void RenderUI()
 {
     DrawFPS(10, 10);
-
     DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
 }
 

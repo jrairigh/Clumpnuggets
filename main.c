@@ -28,18 +28,21 @@ typedef struct Clumpnugget
 {
     Vector2 position;
     Vector2 velocity;
+    bool attached;
 } Clumpnugget;
 
 typedef struct Food
 {
     Vector2 position;
+    bool consumed;
 } Food;
 
 Invader g_invader;
-Clumpnugget g_clumpnuggets[1000];
+Clumpnugget g_clumpnuggets[100];
 Food g_food[1000];
 
 const float g_clump_nugget_radius = 10.0f;
+const float g_clump_nugget_speed = 10.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
 const int g_screen_height = 1000;
@@ -55,8 +58,14 @@ void RunGame();
 void CloseGame();
 void InitializeGameSpecifics();
 void Update(const float frame_time);
+void UpdateCamera2D(const float frame_time);
+void UpdateInvader(const float frame_time);
+void UpdateClumpnuggets(const float frame_time);
 void Render(const float frame_time);
 void RenderWorld(const float frame_time);
+void RenderInvader();
+void RenderClumpnuggets();
+void RenderFood();
 void RenderUI();
 void Log(const char* format, const float elapsed_seconds, ...);
 
@@ -112,10 +121,23 @@ void InitializeGameSpecifics()
     for(int i = 0; i < _countof(g_food); ++i)
     {
         g_food[i].position = (Vector2){(float)GetRandomValue(-5000, 5000), (float)GetRandomValue(-5000, 5000)};
+        g_food[i].consumed = false;
     }
 }
 
 void Update(const float frame_time)
+{
+    UpdateCamera2D(frame_time);
+    UpdateInvader(frame_time);
+    UpdateClumpnuggets(frame_time);
+}
+
+void UpdateCamera2D(const float frame_time)
+{
+    g_camera.target = Vector2Add(g_camera.target, Vector2Scale(g_invader.velocity, frame_time));
+}
+
+void UpdateInvader(const float frame_time)
 {
     g_invader.state = IsKeyDown(KEY_SPACE) ? Moving : Idle;
 
@@ -132,8 +154,42 @@ void Update(const float frame_time)
         ? RAD2DEG * acosf(-g_invader.look_at_direction.y)
         : 180.0f + RAD2DEG * acosf(g_invader.look_at_direction.y);
 
-    g_camera.target = Vector2Add(g_camera.target, Vector2Scale(g_invader.velocity, frame_time));
     g_invader.position = g_camera.target;
+
+    // consume food and grow invader
+    for(int i = 0; i < _countof(g_food); ++i)
+    {
+        if(g_food[i].consumed)
+        {
+            continue;
+        }
+
+        g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius, g_food[i].position, g_food_radius);
+        g_invader.radius += g_food[i].consumed ? 1.0f : 0.0f;
+    }
+}
+
+void UpdateClumpnuggets(const float frame_time)
+{
+    for(int i = 0; i < _countof(g_clumpnuggets); ++i)
+    {
+        if(g_clumpnuggets[i].attached)
+        {
+            continue;
+        }
+
+        const Vector2 invader_direction = Vector2Normalize(Vector2Subtract(g_invader.position, g_clumpnuggets[i].position));
+        const Vector2 acceleration = Vector2Scale(invader_direction, g_clump_nugget_speed);
+        g_clumpnuggets[i].velocity = Vector2Add(g_clumpnuggets[i].velocity, Vector2Scale(acceleration, frame_time));
+        g_clumpnuggets[i].velocity = Vector2Clamp(g_clumpnuggets[i].velocity, (Vector2){-g_clump_nugget_speed, -g_clump_nugget_speed}, (Vector2){g_clump_nugget_speed, g_clump_nugget_speed});
+        g_clumpnuggets[i].position = Vector2Add(g_clumpnuggets[i].position, Vector2Scale(g_clumpnuggets[i].velocity, frame_time));
+
+        const float embed_distance = 2.0f;
+        if(CheckCollisionCircles(g_invader.position, g_invader.radius - embed_distance, g_clumpnuggets[i].position, g_clump_nugget_radius))
+        {
+            g_clumpnuggets[i].attached = true;
+        }
+    }
 }
 
 void Render(const float frame_time)
@@ -151,15 +207,33 @@ void Render(const float frame_time)
 
 void RenderWorld(const float frame_time)
 {
-    DrawCircleV(g_invader.position, g_invader.radius, RED);
+    RenderInvader();
+    RenderClumpnuggets();
+    RenderFood();
+}
 
-    for(int i = 0; i < 1000; i++)
+void RenderInvader()
+{
+    DrawCircleV(g_invader.position, g_invader.radius, RED);
+}
+
+void RenderClumpnuggets()
+{
+    for(int i = 0; i < _countof(g_clumpnuggets); ++i)
     {
         DrawCircleV(g_clumpnuggets[i].position, g_clump_nugget_radius, YELLOW);
     }
+}
 
-    for(int i = 0; i < 1000; i++)
+void RenderFood()
+{
+    for(int i = 0; i < _countof(g_food); ++i)
     {
+        if(g_food[i].consumed)
+        {
+            continue;
+        }
+
         DrawCircleV(g_food[i].position, g_food_radius, RED);
     }
 }

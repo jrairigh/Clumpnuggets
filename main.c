@@ -37,7 +37,7 @@ typedef struct Food
 } Food;
 
 Invader g_invader;
-Clumpnugget g_clumpnuggets[100];
+Clumpnugget g_clumpnuggets[200];
 Food g_food[1000];
 Camera2D g_camera;
 Font g_font;
@@ -53,16 +53,18 @@ enum GameState
     Quit
 } g_game_state;
 
+const Rectangle g_world_bounds = {-2000.0f, -2000.0f, 4000.0f, 4000.0f};
 const float g_invader_start_radius = 30.0f;
+const float g_invader_acceleration = 700.0f;
 const float g_clump_nugget_radius = 10.0f;
-const float g_clump_nugget_speed = 20.0f;
+const float g_clump_nugget_speed = 50.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
 const int g_screen_height = 1000;
 const float g_embed_distance = -5.0f;
 const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
-const float g_next_round_timer_reset = 7.0f;
+const float g_next_round_timer_reset = 5.0f;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
@@ -99,6 +101,7 @@ void RenderClumpnuggets();
 void RenderFood();
 void RenderUI();
 void RenderInGameUI();
+void RenderGameWinUI();
 void RenderMenu();
 void RenderMenuBackdrop();
 void RenderHowToPlay();
@@ -152,16 +155,18 @@ void InitializeGameSpecifics()
     g_invader.position = Vector2Zero();
     g_invader.radius = g_invader_start_radius;
 
+    const int x = (int)(g_world_bounds.width * 0.5f);
+    const int y = (int)(g_world_bounds.height * 0.5f);
     memset(g_clumpnuggets, 0, sizeof(g_clumpnuggets));
     for(int i = 0; i < _countof(g_clumpnuggets); ++i)
     {
-        g_clumpnuggets[i].position = (Vector2){(float)GetRandomValue(-5000, 5000), (float)GetRandomValue(-5000, 5000)};
+        g_clumpnuggets[i].position = (Vector2){(float)GetRandomValue(-x, x), (float)GetRandomValue(-y, y)};
     }
 
     memset(g_food, 0, sizeof(g_food));
     for(int i = 0; i < _countof(g_food); ++i)
     {
-        g_food[i].position = (Vector2){(float)GetRandomValue(-5000, 5000), (float)GetRandomValue(-5000, 5000)};
+        g_food[i].position = (Vector2){(float)GetRandomValue(-x, x), (float)GetRandomValue(-y, y)};
         g_food[i].consumed = false;
     }
     
@@ -221,9 +226,8 @@ void UpdateInvader(const float frame_time)
 {
     g_invader.state = IsKeyDown(KEY_SPACE) ? Moving : Idle;
 
-    const float acceleration = 300.0f;
     const float thrusters_on = g_invader.state == Moving ? 1.0f : 0.0f;
-    g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.look_at_direction, thrusters_on * acceleration * frame_time));
+    g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.look_at_direction, thrusters_on * g_invader_acceleration * frame_time));
     g_invader.velocity = Vector2Scale(g_invader.velocity, g_friction);
 
     const Vector2 screen_center = g_camera.offset;
@@ -378,16 +382,19 @@ void Render(const float frame_time)
 
 void RenderWorld(const float frame_time)
 {
-    RenderInvader();
     RenderClumpnuggets();
+    RenderInvader();
     RenderFood();
 }
 
 void RenderInvader()
 {
     const float brightness = Lerp(0.0f, -1.0f, 1.0f - g_hunger_timer / g_hunger_timer_reset);
-    DrawCircleV(g_invader.position, g_invader.radius, ColorBrightness(RED, brightness));
+    const Color color = ColorBrightness(RED, brightness);
+    DrawCircleV(g_invader.position, g_invader.radius, color);
     DrawCircleLinesV(g_invader.position, g_target_radius, ORANGE);
+    const Vector2 head_origin = Vector2Add(g_invader.position, Vector2Scale(g_invader.look_at_direction, g_invader.radius));
+    DrawCircleV(head_origin, 10.0f, color);
 }
 
 void RenderClumpnuggets()
@@ -438,7 +445,7 @@ void RenderUI()
         }break;
         case GameWin:
         {
-            DrawTextPro(g_font, TextFormat("Round %d Completed", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, WHITE);
+            RenderGameWinUI();
         }break;
         case GameLose:
         {
@@ -479,13 +486,26 @@ void RenderInGameUI()
 {
     const float value = 2.0f * expf(-g_round_start_timer);
     const float alpha = value > 1.0f ? 1.0f : value;
-    DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
-    DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
+
+    if(alpha > 0.1f)
+    {
+        DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
+    }
+}
+
+void RenderGameWinUI()
+{
+    const float value = 2.0f * expf(-g_next_round_timer);
+    const float alpha = value > 1.0f ? 1.0f : value;
+
+    if(alpha > 0.1f)
+    {
+        DrawTextPro(g_font, TextFormat("Round %d Completed", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
+    }
 }
 
 void RenderHowToPlay()
 {
-
     static const char* help_text = "Use the mouse and space bar to move the invader,\n\n"
         "Collect food (red squares) to grow to target size,\n\n"
         "Eat quickly or you'll starve,\n\n"

@@ -41,6 +41,8 @@ Clumpnugget g_clumpnuggets[200];
 Food g_food[400];
 Camera2D g_camera;
 Font g_font;
+Sound g_pickup_sound, g_low_hp_sound;
+Music g_ambient_music;
 
 enum GameState
 {
@@ -68,6 +70,7 @@ const float g_next_round_timer_reset = 3.0f;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
+float g_hunger_sound_timer = 0.0f;
 float g_next_round_timer = 7.0f;
 float g_round_start_timer = 5.0f;
 int g_difficulty = 1;
@@ -130,6 +133,12 @@ void InitializeGame()
     }
 
     g_font = LoadFont("assets/fonts/COOPBL.ttf");
+    g_pickup_sound = LoadSound("assets/sfx/pickup.wav");
+    g_low_hp_sound = LoadSound("assets/sfx/low_hp.wav");
+    g_ambient_music = LoadMusicStream("assets/sfx/ambient_music.mp3");
+    PlayMusicStream(g_ambient_music);
+    SetMusicVolume(g_ambient_music, 0.5f);
+
     g_game_state = Menu;
 }
 
@@ -180,6 +189,7 @@ void InitializeGameSpecifics()
     g_target_radius = g_invader_start_radius * (float)g_difficulty;
     g_game_state = InGame;
     g_hunger_timer = g_hunger_timer_reset;
+    g_hunger_sound_timer = 0.25f;
     g_next_round_timer = g_next_round_timer_reset;
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
@@ -187,6 +197,7 @@ void InitializeGameSpecifics()
 
 void Update(const float frame_time)
 {
+    UpdateMusicStream(g_ambient_music);
     switch(g_game_state)
     {
         case GameInit:
@@ -326,9 +337,17 @@ void UpdateFood(const float frame_time)
 
         g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_food[i].position, g_food_radius);
         
-        int last_consumed = g_food_consumed;
+        const int last_consumed = g_food_consumed;
         g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
-        g_hunger_timer = g_food_consumed > last_consumed ? g_hunger_timer_reset : g_hunger_timer;
+        const bool is_consumed = g_food_consumed > last_consumed;
+        g_hunger_timer = is_consumed ? g_hunger_timer_reset : g_hunger_timer;
+
+        if(is_consumed)
+        {
+            SetSoundVolume(g_pickup_sound, Lerp(0.01f, 0.1f, (float)GetRandomValue(0, 100) / 100.0f));
+            SetSoundPitch(g_pickup_sound, Lerp(0.5f, 1.0f, (float)GetRandomValue(0, 100) / 100.0f));
+            PlaySound(g_pickup_sound);
+        }
     }
 }
 
@@ -366,6 +385,18 @@ void UpdateInGameState(const float frame_time)
     g_game_state = g_target_radius <= g_invader.radius ? GameWin : g_game_state;
     g_game_state = g_hunger_timer <= 0.0f ? GameLose : g_game_state;
     g_game_state = IsKeyPressed(KEY_ESCAPE) ? Menu : g_game_state;
+
+    if(g_hunger_timer <= 5.0f)
+    {
+        g_hunger_sound_timer -= frame_time;
+        if(g_hunger_sound_timer <= 0.0f)
+        {
+            static int beat;
+            ++beat;
+            g_hunger_sound_timer = 0.25f;
+            PlaySound(g_low_hp_sound);
+        }
+    }
 }
 
 void UpdateGameWin(const float frame_time)
@@ -536,6 +567,9 @@ void RenderMenuBackdrop()
 
 void FreeResources()
 {
+    UnloadMusicStream(g_ambient_music);
+    UnloadSound(g_low_hp_sound);
+    UnloadSound(g_pickup_sound);
     UnloadFont(g_font);
 }
 

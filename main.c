@@ -272,14 +272,6 @@ void UpdateFood(const float frame_time)
             continue;
         }
 
-        g_food[i].velocity = Vector2Scale(g_food[i].velocity, g_friction);
-        g_food[i].position = Vector2Add(g_food[i].position, Vector2Scale(g_food[i].velocity, frame_time));
-        g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_food[i].position, g_food_radius);
-        
-        int last_consumed = g_food_consumed;
-        g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
-        g_hunger_timer = g_food_consumed > last_consumed ? g_hunger_timer_reset : g_hunger_timer;
-
         // food can't be consumed if a clumpnugget is attached and in the way
         for(int j = 0; j < _countof(g_clumpnuggets); ++j)
         {
@@ -292,9 +284,15 @@ void UpdateFood(const float frame_time)
             {
                 const Vector2 direction = Vector2Normalize(Vector2Subtract(g_food[i].position, g_clumpnuggets[j].position));
                 const float amount = Vector2DotProduct(direction, Vector2Normalize(g_invader.velocity));
-                g_food[i].velocity = Vector2Scale(direction, Vector2Distance(g_invader.velocity, Vector2Zero()) * amount);
+                g_food[i].position = Vector2Add(g_food[i].position, Vector2Scale(direction, amount));
             }
         }
+
+        g_food[i].consumed = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_food[i].position, g_food_radius);
+        
+        int last_consumed = g_food_consumed;
+        g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
+        g_hunger_timer = g_food_consumed > last_consumed ? g_hunger_timer_reset : g_hunger_timer;
     }
 }
 

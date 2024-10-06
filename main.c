@@ -40,12 +40,17 @@ Invader g_invader;
 Clumpnugget g_clumpnuggets[100];
 Food g_food[1000];
 Camera2D g_camera;
+Font g_font;
 
 enum GameState
 {
+    Menu,
     GameWin,
     GameLose,
-    InGame
+    InGame,
+    GameInit,
+    HowToPlay,
+    Quit
 } g_game_state;
 
 const float g_invader_start_radius = 30.0f;
@@ -61,6 +66,8 @@ int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
 int g_difficulty = 1;
+int g_menu_selection = 0;
+const char* g_menu_items[] = {"Start", "How to play?", "Quit"};
 
 #ifdef NDEBUG
 const bool g_debug_mode = false;
@@ -77,13 +84,20 @@ void UpdateCamera2D(const float frame_time);
 void UpdateInvader(const float frame_time);
 void UpdateClumpnuggets(const float frame_time);
 void UpdateFood(const float frame_time);
-void UpdateGameState(const float frame_time);
+void UpdateInGameState(const float frame_time);
+void UpdateMenu();
+void UpdateHowToPlay();
 void Render(const float frame_time);
 void RenderWorld(const float frame_time);
 void RenderInvader();
 void RenderClumpnuggets();
 void RenderFood();
 void RenderUI();
+void RenderMenu();
+void RenderMenuBackdrop();
+void RenderHowToPlay();
+void FreeResources();
+bool IsRunningGame();
 void Log(const char* format, const float elapsed_seconds, ...);
 
 int main(int n, char** args) 
@@ -98,13 +112,15 @@ void InitializeGame()
     SetTraceLogLevel(g_debug_mode ? LOG_ALL : LOG_NONE);
     InitWindow(g_screen_width, g_screen_height, "Clumpnuggets");
     InitAudioDevice();
-    HideCursor();
-    InitializeGameSpecifics();
+    SetExitKey(0);
+
+    g_font = LoadFont("assets/fonts/COOPBL.ttf");
+    g_game_state = Menu;
 }
 
 void RunGame()
 {
-    while (!WindowShouldClose()) 
+    while (IsRunningGame()) 
     {
         const float frame_time = GetFrameTime();
         Update(frame_time);
@@ -114,6 +130,7 @@ void RunGame()
 
 void CloseGame()
 {
+    FreeResources();
     CloseAudioDevice();
     CloseWindow();
 }
@@ -149,14 +166,29 @@ void InitializeGameSpecifics()
 
 void Update(const float frame_time)
 {
-    UpdateGameState(frame_time);
-
-    if(g_game_state == InGame)
+    switch(g_game_state)
     {
-        UpdateCamera2D(frame_time);
-        UpdateInvader(frame_time);
-        UpdateClumpnuggets(frame_time);
-        UpdateFood(frame_time);
+        case GameInit:
+        {
+            InitializeGameSpecifics();
+        }break;
+        case InGame:
+        {
+            HideCursor();
+            UpdateInGameState(frame_time);
+            UpdateCamera2D(frame_time);
+            UpdateInvader(frame_time);
+            UpdateClumpnuggets(frame_time);
+            UpdateFood(frame_time);
+        }break;
+        case Menu:
+        {
+            UpdateMenu();
+        }break;
+        case HowToPlay:
+        {
+            UpdateHowToPlay();
+        }break;
     }
 }
 
@@ -266,11 +298,44 @@ void UpdateFood(const float frame_time)
     }
 }
 
-void UpdateGameState(const float frame_time)
+void UpdateMenu()
+{
+    const int items_count = _countof(g_menu_items);
+    g_menu_selection = g_menu_selection + (int)(IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S));
+    g_menu_selection = items_count + g_menu_selection - (int)(IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W));
+    g_menu_selection %= items_count;
+
+    if(IsKeyPressed(KEY_ENTER))
+    {
+        switch(g_menu_selection)
+        {
+            case 0:
+            {
+                g_game_state = GameInit;
+            }break;
+            case 1:
+            {
+                g_game_state = HowToPlay;
+            }break;
+            case 2:
+            {
+                g_game_state = Quit;
+            }break;
+        }
+    }
+}
+
+void UpdateInGameState(const float frame_time)
 {
     g_hunger_timer -= frame_time;
     g_game_state = g_target_radius <= g_invader.radius ? GameWin : g_game_state;
     g_game_state = g_hunger_timer <= 0.0f ? GameLose : g_game_state;
+    g_game_state = IsKeyPressed(KEY_ESCAPE) ? Menu : g_game_state;
+}
+
+void UpdateHowToPlay()
+{
+    g_game_state = IsKeyPressed(KEY_ESCAPE) ? Menu : g_game_state;
 }
 
 void Render(const float frame_time)
@@ -323,8 +388,85 @@ void RenderFood()
 
 void RenderUI()
 {
-    DrawFPS(10, 10);
-    DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
+    switch(g_game_state)
+    {
+        case Menu:
+        {
+            RenderMenuBackdrop();
+            RenderMenu();
+        }break;
+        case HowToPlay:
+        {
+            RenderMenuBackdrop();
+            RenderHowToPlay();
+        }break;
+        case InGame:
+        {
+            DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
+        }break;
+    }
+
+    if(g_debug_mode)
+    {
+        DrawFPS(10, 10);
+    }
+}
+
+void RenderMenu()
+{
+    const Vector2 position = {210, 227};
+    const Vector2 origin = Vector2Zero();
+    const float rotation = 0.0f;
+    const float font_size = 92.0f;
+    const float spacing = 2.0f;
+
+    DrawTextPro(g_font, "Clumpnuggets", position, origin, rotation, font_size, spacing, WHITE);
+
+    for(int i = 0; i < _countof(g_menu_items); ++i)
+    {
+        const float y_spacing = 55.0f;
+        const Vector2 position = {586, 424 + y_spacing * i};
+        const Vector2 origin = Vector2Zero();
+        const float rotation = 0.0f;
+        const float font_size = 36.0f;
+        const float spacing = 2.0f;
+        const Color color = i == g_menu_selection ? YELLOW : LIGHTGRAY;
+        DrawTextPro(g_font, g_menu_items[i], position, origin, rotation, font_size, spacing, color);
+    }
+}
+
+void RenderHowToPlay()
+{
+
+    static const char* help_text = "Use the mouse and space bar to move the invader,\n\n"
+        "Collect food (red squares) to grow to target size,\n\n"
+        "Eat quickly or you'll starve,\n\n"
+        "Avoid clumpnuggets (yellow circles),\n\n"
+        "At any point, press ESC to return to the menu\n\n";
+
+    DrawTextPro(g_font, help_text, (Vector2){96.0f, 300.0f}, Vector2Zero(), 0.0f, 36.0f, 2.0f, WHITE);
+}
+
+void RenderMenuBackdrop()
+{
+    //static float x,y, font_size;
+    //x = IsKeyDown(KEY_RIGHT) ? x + 1 : x;
+    //x = IsKeyDown(KEY_LEFT) ? x - 1 : x;
+    //y = IsKeyDown(KEY_UP) ? y - 1 : y;
+    //y = IsKeyDown(KEY_DOWN) ? y + 1 : y;
+    //font_size = IsKeyDown(KEY_SPACE) ? font_size + 1 : font_size;
+    //font_size = IsKeyDown(KEY_LEFT_SHIFT) ? font_size - 1 : font_size;
+    DrawRectangleRounded((Rectangle){48.0f, 48.0f, 907.0f, 907.0f}, 1.0f, 1, Fade(BLACK, 0.7f));
+}
+
+void FreeResources()
+{
+    UnloadFont(g_font);
+}
+
+bool IsRunningGame()
+{
+    return !WindowShouldClose() && g_game_state != Quit;
 }
 
 void Log(const char* format, const float elapsed_seconds, ...)

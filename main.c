@@ -38,7 +38,7 @@ typedef struct Food
 
 Invader g_invader;
 Clumpnugget g_clumpnuggets[200];
-Food g_food[1000];
+Food g_food[400];
 Camera2D g_camera;
 Font g_font;
 
@@ -64,7 +64,7 @@ const int g_screen_height = 1000;
 const float g_embed_distance = -5.0f;
 const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
-const float g_next_round_timer_reset = 5.0f;
+const float g_next_round_timer_reset = 3.0f;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
@@ -255,8 +255,15 @@ void UpdateClumpnuggets(const float frame_time)
             continue;
         }
 
-        const Vector2 invader_direction = Vector2Normalize(Vector2Subtract(g_invader.position, g_clumpnuggets[i].position));
-        const Vector2 acceleration = Vector2Scale(invader_direction, g_clump_nugget_speed);
+        const Vector2 invader_direction = Vector2Subtract(g_invader.position, g_clumpnuggets[i].position);
+
+        // only clumpnuggets within sight will chase
+        if(Vector2Length(invader_direction) > 600.0f)
+        {
+            continue;
+        }
+
+        const Vector2 acceleration = Vector2Scale(Vector2Normalize(invader_direction), g_clump_nugget_speed);
         g_clumpnuggets[i].velocity = Vector2Add(g_clumpnuggets[i].velocity, Vector2Scale(acceleration, frame_time));
         g_clumpnuggets[i].velocity = Vector2Clamp(g_clumpnuggets[i].velocity, (Vector2){-g_clump_nugget_speed, -g_clump_nugget_speed}, (Vector2){g_clump_nugget_speed, g_clump_nugget_speed});
         g_clumpnuggets[i].position = Vector2Add(g_clumpnuggets[i].position, Vector2Scale(g_clumpnuggets[i].velocity, frame_time));

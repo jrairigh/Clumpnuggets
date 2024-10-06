@@ -55,17 +55,21 @@ enum GameState
 
 const float g_invader_start_radius = 30.0f;
 const float g_clump_nugget_radius = 10.0f;
-const float g_clump_nugget_speed = 10.0f;
+const float g_clump_nugget_speed = 20.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
 const int g_screen_height = 1000;
 const float g_embed_distance = -5.0f;
 const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
+const float g_next_round_timer_reset = 7.0f;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
+float g_next_round_timer = 7.0f;
+float g_round_start_timer = 5.0f;
 int g_difficulty = 1;
+int g_game_round = 0;
 int g_menu_selection = 0;
 const char* g_menu_items[] = {"Start", "How to play?", "Quit"};
 
@@ -87,12 +91,14 @@ void UpdateFood(const float frame_time);
 void UpdateInGameState(const float frame_time);
 void UpdateMenu();
 void UpdateHowToPlay();
+void UpdateGameWin(const float frame_time);
 void Render(const float frame_time);
 void RenderWorld(const float frame_time);
 void RenderInvader();
 void RenderClumpnuggets();
 void RenderFood();
 void RenderUI();
+void RenderInGameUI();
 void RenderMenu();
 void RenderMenuBackdrop();
 void RenderHowToPlay();
@@ -113,6 +119,7 @@ void InitializeGame()
     InitWindow(g_screen_width, g_screen_height, "Clumpnuggets");
     InitAudioDevice();
     SetExitKey(0);
+    HideCursor();
 
     g_font = LoadFont("assets/fonts/COOPBL.ttf");
     g_game_state = Menu;
@@ -159,9 +166,13 @@ void InitializeGameSpecifics()
     }
     
     ++g_difficulty;
+    ++g_game_round;
     g_target_radius = g_invader_start_radius * (float)g_difficulty;
     g_game_state = InGame;
     g_hunger_timer = g_hunger_timer_reset;
+    g_next_round_timer = g_next_round_timer_reset;
+    g_round_start_timer = 0.0f;
+    g_food_consumed = 0;
 }
 
 void Update(const float frame_time)
@@ -174,12 +185,21 @@ void Update(const float frame_time)
         }break;
         case InGame:
         {
-            HideCursor();
             UpdateInGameState(frame_time);
             UpdateCamera2D(frame_time);
             UpdateInvader(frame_time);
             UpdateClumpnuggets(frame_time);
             UpdateFood(frame_time);
+        }break;
+        case GameWin:
+        {
+            UpdateGameWin(frame_time);
+        }break;
+        case GameLose:
+        {
+            g_difficulty = 1;
+            g_game_round = 0;
+            g_game_state = IsKeyPressed(KEY_ESCAPE) ? Menu : g_game_state;
         }break;
         case Menu:
         {
@@ -326,9 +346,16 @@ void UpdateMenu()
 void UpdateInGameState(const float frame_time)
 {
     g_hunger_timer -= frame_time;
+    g_round_start_timer += frame_time;
     g_game_state = g_target_radius <= g_invader.radius ? GameWin : g_game_state;
     g_game_state = g_hunger_timer <= 0.0f ? GameLose : g_game_state;
     g_game_state = IsKeyPressed(KEY_ESCAPE) ? Menu : g_game_state;
+}
+
+void UpdateGameWin(const float frame_time)
+{
+    g_next_round_timer -= frame_time;
+    g_game_state = g_next_round_timer <= 0.0f ? GameInit : g_game_state;
 }
 
 void UpdateHowToPlay()
@@ -380,12 +407,19 @@ void RenderFood()
             continue;
         }
 
-        DrawCircleV(g_food[i].position, g_food_radius, RED);
+        DrawRectangleV(g_food[i].position, (Vector2){g_food_radius, g_food_radius}, RED);
     }
 }
 
 void RenderUI()
 {
+    //static float x,y, font_size;
+    //x = IsKeyDown(KEY_RIGHT) ? x + 1 : x;
+    //x = IsKeyDown(KEY_LEFT) ? x - 1 : x;
+    //y = IsKeyDown(KEY_UP) ? y - 1 : y;
+    //y = IsKeyDown(KEY_DOWN) ? y + 1 : y;
+    //font_size = IsKeyDown(KEY_SPACE) ? font_size + 1 : font_size;
+    //font_size = IsKeyDown(KEY_LEFT_SHIFT) ? font_size - 1 : font_size;
     switch(g_game_state)
     {
         case Menu:
@@ -400,7 +434,15 @@ void RenderUI()
         }break;
         case InGame:
         {
-            DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
+            RenderInGameUI();
+        }break;
+        case GameWin:
+        {
+            DrawTextPro(g_font, TextFormat("Round %d Completed", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, WHITE);
+        }break;
+        case GameLose:
+        {
+            DrawTextPro(g_font, "Clumpnuggets Win", (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, WHITE);
         }break;
     }
 
@@ -433,6 +475,14 @@ void RenderMenu()
     }
 }
 
+void RenderInGameUI()
+{
+    const float value = 2.0f * expf(-g_round_start_timer);
+    const float alpha = value > 1.0f ? 1.0f : value;
+    DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
+    DrawRectangleV(GetMousePosition(), (Vector2){5, 5}, WHITE);
+}
+
 void RenderHowToPlay()
 {
 
@@ -447,13 +497,6 @@ void RenderHowToPlay()
 
 void RenderMenuBackdrop()
 {
-    //static float x,y, font_size;
-    //x = IsKeyDown(KEY_RIGHT) ? x + 1 : x;
-    //x = IsKeyDown(KEY_LEFT) ? x - 1 : x;
-    //y = IsKeyDown(KEY_UP) ? y - 1 : y;
-    //y = IsKeyDown(KEY_DOWN) ? y + 1 : y;
-    //font_size = IsKeyDown(KEY_SPACE) ? font_size + 1 : font_size;
-    //font_size = IsKeyDown(KEY_LEFT_SHIFT) ? font_size - 1 : font_size;
     DrawRectangleRounded((Rectangle){48.0f, 48.0f, 907.0f, 907.0f}, 1.0f, 1, Fade(BLACK, 0.7f));
 }
 

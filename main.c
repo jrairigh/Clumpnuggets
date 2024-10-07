@@ -655,13 +655,13 @@ void RenderGameLoseUI()
 
 void RenderHowToPlay()
 {
-    static const char* help_text = "* Use the mouse and space bar to move the invader,\n\n"
-        "* Double-tap space bar to dash after a cooldown period,\n\n"
+    static const char* help_text = "* Use the mouse and space bar to move,\n\n"
+        "* Double-tap space bar to dash after a cooldown,\n\n"
         "* Collect food (red squares) to grow to target size,\n\n"
         "* You advance to next game round once\n\n"
         "   you've reached the target size,\n\n"
         "* Eat quickly or you'll starve,\n\n"
-        "* Avoid clumpnuggets (yellow circles),\n\n"
+        "* Avoid clumpnuggets,\n\n"
         "* At any point, press ESC to return to the menu\n\n";
 
     DrawTextPro(g_font, help_text, (Vector2){96.0f, 300.0f}, Vector2Zero(), 0.0f, 36.0f, 2.0f, WHITE);

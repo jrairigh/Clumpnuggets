@@ -12,6 +12,9 @@ typedef struct Invader
     Vector2 look_at_direction;
     float radius;
     float rotation;
+    float dash_cooldown_timer;
+    float dash_tracker[2];
+    int dash_tracker_index;
 
     enum InvaderState
     {
@@ -66,6 +69,7 @@ enum GameState
 const Rectangle g_world_bounds = {-2000.0f, -2000.0f, 4000.0f, 4000.0f};
 const float g_invader_start_radius = 30.0f;
 const float g_invader_acceleration = 500.0f;
+const float g_invader_dash_cooldown_timer_reset = 5.0f;
 const float g_clump_nugget_radius = 10.0f;
 const float g_clump_nugget_max_speed = 50.0f;
 const float g_food_radius = 10.0f;
@@ -75,6 +79,7 @@ const float g_embed_distance = -5.0f;
 const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
 const float g_next_round_timer_reset = 3.0f;
+const float g_dash_eligibility_period = 0.2f;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
@@ -204,7 +209,7 @@ void InitializeGameSpecifics()
     g_next_round_timer = g_next_round_timer_reset;
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
-    g_background_color = ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, Lerp(1.0f, 0.0f, g_game_round));
+    g_background_color = ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, 1.0f);
 }
 
 void Update(const float frame_time)
@@ -252,12 +257,28 @@ void UpdateCamera2D(const float frame_time)
 
 void UpdateInvader(const float frame_time)
 {
+    const enum InvaderState last_state = g_invader.state;
     g_invader.state = IsKeyDown(KEY_SPACE) ? Moving : Idle;
+    const bool state_changed = last_state != g_invader.state;
+
+    float speed_boost = 1.0f;
+    if(state_changed && g_invader.state == Moving)
+    {
+        g_invader.dash_tracker[g_invader.dash_tracker_index % 2] = (float)GetTime();
+        g_invader.dash_tracker_index++;
+
+        const float time_since_last_state_change = fabsf(g_invader.dash_tracker[1] - g_invader.dash_tracker[0]);
+        const bool is_dashing = time_since_last_state_change < g_dash_eligibility_period;
+        const bool can_dash = is_dashing && g_invader.dash_cooldown_timer <= 0.0f;
+        speed_boost = can_dash ? 5.0f : 1.0f;
+        g_invader.dash_cooldown_timer = can_dash ? g_invader_dash_cooldown_timer_reset : g_invader.dash_cooldown_timer;
+    }
 
     const float thrusters_on = g_invader.state == Moving ? 1.0f : 0.0f;
     const float acceleration = max(100.0f, g_invader_acceleration - g_game_round * 50.0f);
     g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.look_at_direction, thrusters_on * acceleration * frame_time));
     g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.velocity, -g_friction * frame_time));
+    g_invader.velocity = Vector2Scale(g_invader.velocity, speed_boost);
 
     const Vector2 screen_center = g_camera.offset;
     g_invader.look_at_direction = Vector2Normalize(Vector2Subtract(GetMousePosition(), screen_center));
@@ -271,6 +292,8 @@ void UpdateInvader(const float frame_time)
     // consume food and grow invader
     g_invader.radius = g_invader_start_radius;
     g_invader.radius += g_food_consumed;
+
+    g_invader.dash_cooldown_timer -= frame_time;
 }
 
 void UpdateClumpnuggets(const float frame_time)
@@ -571,6 +594,7 @@ void RenderGameWinUI()
 void RenderHowToPlay()
 {
     static const char* help_text = "* Use the mouse and space bar to move the invader,\n\n"
+        "* Double-tap space bar to dash after a cooldown period,\n\n"
         "* Collect food (red squares) to grow to target size,\n\n"
         "* You advance to next game round once\n\n"
         "   you've reached the target size,\n\n"
@@ -603,10 +627,10 @@ Color LerpColor(const Color a, const Color b, const float t)
 {
     return (Color)
     {
-        Lerp(a.r, b.r, t),
-        Lerp(a.g, b.g, t),
-        Lerp(a.b, b.b, t),
-        Lerp(a.a, b.a, t)
+        (unsigned char)Lerp((float)a.r, (float)b.r, t),
+        (unsigned char)Lerp((float)a.g, (float)b.g, t),
+        (unsigned char)Lerp((float)a.b, (float)b.b, t),
+        (unsigned char)Lerp((float)a.a, (float)b.a, t)
     };
 }
 

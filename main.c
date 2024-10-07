@@ -53,6 +53,8 @@ Camera2D g_camera;
 Font g_font;
 Sound g_pickup_sound, g_low_hp_sound;
 Music g_ambient_music;
+Texture2D g_spritesheet;
+Texture2D g_background[3];
 Color g_background_color;
 
 enum GameState
@@ -65,6 +67,28 @@ enum GameState
     HowToPlay,
     Quit
 } g_game_state;
+
+typedef Rectangle Sprite;
+
+enum SpriteType
+{
+    Clumpnugget_1,
+    Clumpnugget_2,
+    Clumpnugget_3,
+};
+
+enum BackgroundType
+{    
+    Background_1,
+    Background_2,
+    Background_3
+};
+
+Sprite g_sprites[3] = {
+    {4.0f, 1.0f, 64.0f, 65.0f},
+    {66.0f, 1.0f, 64.0f, 65.0f},
+    {131.0f, 1.0f, 64.0f, 65.0f}
+};
 
 const Rectangle g_world_bounds = {-2000.0f, -2000.0f, 4000.0f, 4000.0f};
 const float g_invader_start_radius = 30.0f;
@@ -113,12 +137,14 @@ void UpdateHowToPlay();
 void UpdateGameWin(const float frame_time);
 void Render(const float frame_time);
 void RenderWorld(const float frame_time);
+void RenderBackground();
 void RenderInvader();
 void RenderClumpnuggets();
 void RenderFood();
 void RenderUI();
 void RenderInGameUI();
 void RenderGameWinUI();
+void RenderGameLoseUI();
 void RenderMenu();
 void RenderMenuBackdrop();
 void RenderHowToPlay();
@@ -151,6 +177,10 @@ void InitializeGame()
     g_pickup_sound = LoadSound("assets/sfx/pickup.wav");
     g_low_hp_sound = LoadSound("assets/sfx/low_hp.wav");
     g_ambient_music = LoadMusicStream("assets/sfx/ambient_music.mp3");
+    g_spritesheet = LoadTexture("assets/sprites/spritesheet.png");
+    g_background[Background_1] = LoadTexture("assets/sprites/background_1.png");
+    g_background[Background_2] = LoadTexture("assets/sprites/background_2.png");
+    g_background[Background_3] = LoadTexture("assets/sprites/background_3.png");
     PlayMusicStream(g_ambient_music);
     SetMusicVolume(g_ambient_music, 0.5f);
 
@@ -210,7 +240,7 @@ void InitializeGameSpecifics()
     g_next_round_timer = g_next_round_timer_reset;
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
-    g_background_color = ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, 1.0f);
+    g_background_color = ColorFromHSV(60.0f, 0.6f, 1.0f);//ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, 1.0f);
     g_attached_clumpnuggets = 0;
 }
 
@@ -467,7 +497,7 @@ void UpdateHowToPlay()
 void Render(const float frame_time)
 {
     BeginDrawing();
-    ClearBackground(g_background_color);
+    ClearBackground(ColorFromHSV(60.0f, 0.6f, 0.7f));
     BeginScissorMode(0, 0, g_screen_width, g_screen_height);
     BeginMode2D(g_camera);
     RenderWorld(frame_time);
@@ -479,9 +509,21 @@ void Render(const float frame_time)
 
 void RenderWorld(const float frame_time)
 {
+    RenderBackground();
     RenderClumpnuggets();
     RenderInvader();
     RenderFood();
+}
+
+void RenderBackground()
+{
+    const float period = 0.3f;
+    const float frequency = (2.0f * PI) / period;
+    const enum BackgroundType type = (enum BackgroundType)roundf(sinf((float)GetTime() * frequency) + 1.0f);
+    const float rotation = 0.0f;
+    const Vector2 origin = Vector2Zero();
+    DrawRectangle((int)g_world_bounds.x, (int)g_world_bounds.y, (int)g_world_bounds.width, (int)g_world_bounds.height, g_background_color);
+    DrawTexturePro(g_background[type], g_world_bounds, g_world_bounds, origin, 0.0f, RED);
 }
 
 void RenderInvader()
@@ -497,10 +539,19 @@ void RenderInvader()
 
 void RenderClumpnuggets()
 {
+    const float rotation = 0.0f;
     for(int i = 0; i < _countof(g_clumpnuggets); ++i)
     {
-        const Color color = g_clumpnuggets[i].super_fast ? GOLD : YELLOW;
-        DrawCircleV(g_clumpnuggets[i].position, g_clump_nugget_radius, color);
+        const float period = 0.3f;
+        const float frequency = (2.0f * PI) / period;
+        const enum SpriteType type = (enum SpriteType)roundf(sinf((float)GetTime() * frequency) + 1.0f);
+        const float x = g_clumpnuggets[i].position.x;
+        const float y = g_clumpnuggets[i].position.y;
+        const float width = g_sprites[type].width;
+        const float height = g_sprites[type].height;
+        const Rectangle dest = (Rectangle){x, y, width, height};
+        const Vector2 origin = (Vector2){width * 0.5f, height * 0.5f};
+        DrawTexturePro(g_spritesheet, g_sprites[type], dest, origin, rotation, GRAY);
     }
 }
 
@@ -523,11 +574,13 @@ void RenderUI()
     {
         case Menu:
         {
+            RenderBackground();
             RenderMenuBackdrop();
             RenderMenu();
         }break;
         case HowToPlay:
         {
+            RenderBackground();
             RenderMenuBackdrop();
             RenderHowToPlay();
         }break;
@@ -541,7 +594,7 @@ void RenderUI()
         }break;
         case GameLose:
         {
-            DrawTextPro(g_font, "Clumpnuggets Win", (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, WHITE);
+            RenderGameLoseUI();
         }break;
     }
 
@@ -581,7 +634,7 @@ void RenderInGameUI()
 
     if(alpha > 0.1f)
     {
-        DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
+        DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(BLACK, alpha));
     }
 }
 
@@ -589,11 +642,15 @@ void RenderGameWinUI()
 {
     const float value = 2.0f * expf(-g_next_round_timer);
     const float alpha = value > 1.0f ? 1.0f : value;
-
     if(alpha > 0.1f)
     {
-        DrawTextPro(g_font, TextFormat("Round %d Completed", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(WHITE, alpha));
+        DrawTextPro(g_font, TextFormat("Round %d Completed", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(BLACK, alpha));
     }
+}
+
+void RenderGameLoseUI()
+{
+    DrawTextPro(g_font, "Clumpnuggets Win", (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, BLACK);
 }
 
 void RenderHowToPlay()
@@ -617,6 +674,10 @@ void RenderMenuBackdrop()
 
 void FreeResources()
 {
+    UnloadTexture(g_background[Background_1]);
+    UnloadTexture(g_background[Background_2]);
+    UnloadTexture(g_background[Background_3]);
+    UnloadTexture(g_spritesheet);
     UnloadMusicStream(g_ambient_music);
     UnloadSound(g_low_hp_sound);
     UnloadSound(g_pickup_sound);

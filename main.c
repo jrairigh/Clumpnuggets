@@ -27,6 +27,13 @@ typedef struct Clumpnugget
     Vector2 velocity;
     Vector2 attach_position;
     bool attached;
+    bool super_fast;
+
+    enum MovmentStyle
+    {
+        Chase,
+        Spiral,
+    } move_style;
 } Clumpnugget;
 
 typedef struct Food
@@ -43,6 +50,7 @@ Camera2D g_camera;
 Font g_font;
 Sound g_pickup_sound, g_low_hp_sound;
 Music g_ambient_music;
+Color g_background_color;
 
 enum GameState
 {
@@ -57,9 +65,9 @@ enum GameState
 
 const Rectangle g_world_bounds = {-2000.0f, -2000.0f, 4000.0f, 4000.0f};
 const float g_invader_start_radius = 30.0f;
-const float g_invader_acceleration = 700.0f;
+const float g_invader_acceleration = 500.0f;
 const float g_clump_nugget_radius = 10.0f;
-const float g_clump_nugget_speed = 50.0f;
+const float g_clump_nugget_max_speed = 50.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
 const int g_screen_height = 1000;
@@ -111,6 +119,7 @@ void RenderHowToPlay();
 void FreeResources();
 bool IsRunningGame();
 void Log(const char* format, const float elapsed_seconds, ...);
+Color LerpColor(const Color a, const Color b, const float t);
 
 int main(int n, char** args) 
 {
@@ -175,6 +184,8 @@ void InitializeGameSpecifics()
     for(int i = 0; i < _countof(g_clumpnuggets); ++i)
     {
         g_clumpnuggets[i].position = (Vector2){(float)GetRandomValue(-x, x), (float)GetRandomValue(-y, y)};
+        g_clumpnuggets[i].super_fast = GetRandomValue(0, 1000) < 300;
+        g_clumpnuggets[i].move_style = GetRandomValue(0, 1000) < 600 ? Chase : Spiral;
     }
 
     memset(g_food, 0, sizeof(g_food));
@@ -193,6 +204,7 @@ void InitializeGameSpecifics()
     g_next_round_timer = g_next_round_timer_reset;
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
+    g_background_color = ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, Lerp(1.0f, 0.0f, g_game_round));
 }
 
 void Update(const float frame_time)
@@ -243,8 +255,9 @@ void UpdateInvader(const float frame_time)
     g_invader.state = IsKeyDown(KEY_SPACE) ? Moving : Idle;
 
     const float thrusters_on = g_invader.state == Moving ? 1.0f : 0.0f;
-    g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.look_at_direction, thrusters_on * g_invader_acceleration * frame_time));
-    g_invader.velocity = Vector2Scale(g_invader.velocity, g_friction);
+    const float acceleration = max(100.0f, g_invader_acceleration - g_game_round * 50.0f);
+    g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.look_at_direction, thrusters_on * acceleration * frame_time));
+    g_invader.velocity = Vector2Add(g_invader.velocity, Vector2Scale(g_invader.velocity, -g_friction * frame_time));
 
     const Vector2 screen_center = g_camera.offset;
     g_invader.look_at_direction = Vector2Normalize(Vector2Subtract(GetMousePosition(), screen_center));
@@ -279,10 +292,23 @@ void UpdateClumpnuggets(const float frame_time)
             continue;
         }
 
-        const Vector2 acceleration = Vector2Scale(Vector2Normalize(invader_direction), g_clump_nugget_speed);
+        const float speed = g_clumpnuggets[i].super_fast ? g_clump_nugget_max_speed * 2.0f : g_clump_nugget_max_speed;
+        const Vector2 acceleration = Vector2Scale(Vector2Normalize(invader_direction), speed);
         g_clumpnuggets[i].velocity = Vector2Add(g_clumpnuggets[i].velocity, Vector2Scale(acceleration, frame_time));
-        g_clumpnuggets[i].velocity = Vector2Clamp(g_clumpnuggets[i].velocity, (Vector2){-g_clump_nugget_speed, -g_clump_nugget_speed}, (Vector2){g_clump_nugget_speed, g_clump_nugget_speed});
+        g_clumpnuggets[i].velocity = Vector2Clamp(g_clumpnuggets[i].velocity, (Vector2){-speed, -speed}, (Vector2){speed, speed});
         g_clumpnuggets[i].position = Vector2Add(g_clumpnuggets[i].position, Vector2Scale(g_clumpnuggets[i].velocity, frame_time));
+
+        if(g_clumpnuggets[i].move_style == Spiral)
+        {
+            const float t = (float)GetTime();
+            const float frequency = 2.0f;
+            const Vector2 spiral_velocity = (Vector2) {
+                0.0f,
+                sinf(t * frequency) * 300.0f
+            };
+
+            g_clumpnuggets[i].position = Vector2Add(g_clumpnuggets[i].position, Vector2Scale(spiral_velocity, frame_time));
+        }
 
         g_clumpnuggets[i].attached = CheckCollisionCircles(g_invader.position, g_invader.radius - g_embed_distance, g_clumpnuggets[i].position, g_clump_nugget_radius);
         
@@ -340,7 +366,7 @@ void UpdateFood(const float frame_time)
         const int last_consumed = g_food_consumed;
         g_food_consumed = g_food[i].consumed ? g_food_consumed + 1 : g_food_consumed;
         const bool is_consumed = g_food_consumed > last_consumed;
-        g_hunger_timer = is_consumed ? g_hunger_timer_reset : g_hunger_timer;
+        g_hunger_timer = is_consumed ? min(g_hunger_timer_reset, g_hunger_timer + 5) : g_hunger_timer;
 
         if(is_consumed)
         {
@@ -413,7 +439,7 @@ void UpdateHowToPlay()
 void Render(const float frame_time)
 {
     BeginDrawing();
-    ClearBackground(DARKPURPLE); 
+    ClearBackground(g_background_color);
     BeginScissorMode(0, 0, g_screen_width, g_screen_height);
     BeginMode2D(g_camera);
     RenderWorld(frame_time);
@@ -433,7 +459,8 @@ void RenderWorld(const float frame_time)
 void RenderInvader()
 {
     const float brightness = Lerp(0.0f, -1.0f, 1.0f - g_hunger_timer / g_hunger_timer_reset);
-    const Color color = ColorBrightness(RED, brightness);
+    const float target_radius_completed = g_invader.radius / g_target_radius;
+    const Color color = ColorBrightness(LerpColor(RED, GREEN, target_radius_completed), brightness);
     DrawCircleV(g_invader.position, g_invader.radius, color);
     DrawCircleLinesV(g_invader.position, g_target_radius, ORANGE);
     const Vector2 head_origin = Vector2Add(g_invader.position, Vector2Scale(g_invader.look_at_direction, g_invader.radius));
@@ -444,7 +471,8 @@ void RenderClumpnuggets()
 {
     for(int i = 0; i < _countof(g_clumpnuggets); ++i)
     {
-        DrawCircleV(g_clumpnuggets[i].position, g_clump_nugget_radius, YELLOW);
+        const Color color = g_clumpnuggets[i].super_fast ? GOLD : YELLOW;
+        DrawCircleV(g_clumpnuggets[i].position, g_clump_nugget_radius, color);
     }
 }
 
@@ -463,13 +491,6 @@ void RenderFood()
 
 void RenderUI()
 {
-    //static float x,y, font_size;
-    //x = IsKeyDown(KEY_RIGHT) ? x + 1 : x;
-    //x = IsKeyDown(KEY_LEFT) ? x - 1 : x;
-    //y = IsKeyDown(KEY_UP) ? y - 1 : y;
-    //y = IsKeyDown(KEY_DOWN) ? y + 1 : y;
-    //font_size = IsKeyDown(KEY_SPACE) ? font_size + 1 : font_size;
-    //font_size = IsKeyDown(KEY_LEFT_SHIFT) ? font_size - 1 : font_size;
     switch(g_game_state)
     {
         case Menu:
@@ -576,6 +597,17 @@ void FreeResources()
 bool IsRunningGame()
 {
     return !WindowShouldClose() && g_game_state != Quit;
+}
+
+Color LerpColor(const Color a, const Color b, const float t)
+{
+    return (Color)
+    {
+        Lerp(a.r, b.r, t),
+        Lerp(a.g, b.g, t),
+        Lerp(a.b, b.b, t),
+        Lerp(a.a, b.a, t)
+    };
 }
 
 void Log(const char* format, const float elapsed_seconds, ...)

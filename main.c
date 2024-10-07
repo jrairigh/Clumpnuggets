@@ -70,7 +70,7 @@ const Rectangle g_world_bounds = {-2000.0f, -2000.0f, 4000.0f, 4000.0f};
 const float g_invader_start_radius = 30.0f;
 const float g_invader_acceleration = 500.0f;
 const float g_invader_dash_cooldown_timer_reset = 5.0f;
-const float g_clump_nugget_radius = 10.0f;
+const float g_clump_nugget_radius = 20.0f;
 const float g_clump_nugget_max_speed = 50.0f;
 const float g_food_radius = 10.0f;
 const int g_screen_width = 1000;
@@ -80,6 +80,7 @@ const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
 const float g_next_round_timer_reset = 3.0f;
 const float g_dash_eligibility_period = 0.2f;
+int g_attached_clumpnuggets = 0;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
 float g_hunger_timer = 0.0f;
@@ -210,6 +211,7 @@ void InitializeGameSpecifics()
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
     g_background_color = ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, 1.0f);
+    g_attached_clumpnuggets = 0;
 }
 
 void Update(const float frame_time)
@@ -271,7 +273,7 @@ void UpdateInvader(const float frame_time)
         const bool is_dashing = time_since_last_state_change < g_dash_eligibility_period;
         const bool can_dash = is_dashing && g_invader.dash_cooldown_timer <= 0.0f;
         speed_boost = can_dash ? 5.0f : 1.0f;
-        g_invader.dash_cooldown_timer = can_dash ? g_invader_dash_cooldown_timer_reset : g_invader.dash_cooldown_timer;
+        g_invader.dash_cooldown_timer = can_dash ? g_invader_dash_cooldown_timer_reset + g_attached_clumpnuggets * 0.3f : g_invader.dash_cooldown_timer;
     }
 
     const float thrusters_on = g_invader.state == Moving ? 1.0f : 0.0f;
@@ -337,6 +339,7 @@ void UpdateClumpnuggets(const float frame_time)
         
         if(g_clumpnuggets[i].attached)
         {
+            g_attached_clumpnuggets++;
             g_clumpnuggets[i].attach_position = Vector2Subtract(g_clumpnuggets[i].position, g_invader.position);
         }
 
@@ -413,6 +416,8 @@ void UpdateMenu()
         {
             case 0:
             {
+                g_game_round = 0;
+                g_difficulty = 1;
                 g_game_state = GameInit;
             }break;
             case 1:

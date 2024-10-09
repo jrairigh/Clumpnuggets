@@ -104,6 +104,7 @@ const float g_friction = 0.98f;
 const float g_hunger_timer_reset = 15.0f;
 const float g_next_round_timer_reset = 3.0f;
 const float g_dash_eligibility_period = 0.2f;
+const float g_crosshair_radius = 30.0f;
 int g_attached_clumpnuggets = 0;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
@@ -167,11 +168,6 @@ void InitializeGame()
     InitAudioDevice();
     SetExitKey(0);
     HideCursor();
-
-    if(!g_debug_mode)
-    {
-        SetWindowState(FLAG_FULLSCREEN_MODE);
-    }
 
     g_font = LoadFont("assets/fonts/COOPBL.ttf");
     g_pickup_sound = LoadSound("assets/sfx/pickup.wav");
@@ -636,6 +632,8 @@ void RenderInGameUI()
     {
         DrawTextPro(g_font, TextFormat("Round %d", g_game_round), (Vector2){121.0f, 621.0f}, Vector2Zero(), 0.0f, 92.0f, 2.0f, Fade(BLACK, alpha));
     }
+
+    DrawCircleLinesV(GetMousePosition(), g_crosshair_radius, BLACK);
 }
 
 void RenderGameWinUI()

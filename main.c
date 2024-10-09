@@ -540,7 +540,7 @@ void RenderClumpnuggets()
     {
         const float period = 0.3f;
         const float frequency = (2.0f * PI) / period;
-        const enum SpriteType type = (enum SpriteType)roundf(sinf((float)GetTime() * frequency) + 1.0f);
+        const enum SpriteType type = (enum SpriteType)roundf(sinf((float)GetTime() * frequency + i * PI * 0.5f) + 1.0f);
         const float x = g_clumpnuggets[i].position.x;
         const float y = g_clumpnuggets[i].position.y;
         const float width = g_sprites[type].width;

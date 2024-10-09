@@ -105,6 +105,7 @@ const float g_hunger_timer_reset = 15.0f;
 const float g_next_round_timer_reset = 3.0f;
 const float g_dash_eligibility_period = 0.2f;
 const float g_crosshair_radius = 30.0f;
+const int g_additional_clumpnuggets_per_round = 40;
 int g_attached_clumpnuggets = 0;
 int g_food_consumed = 0;
 float g_target_radius = 0.0f;
@@ -114,6 +115,7 @@ float g_next_round_timer = 7.0f;
 float g_round_start_timer = 5.0f;
 int g_difficulty = 1;
 int g_game_round = 0;
+int g_alive_clumpnuggets = 0;
 int g_menu_selection = 0;
 const char* g_menu_items[] = {"Start", "How to play?", "Quit"};
 
@@ -210,10 +212,15 @@ void InitializeGameSpecifics()
     g_invader.position = Vector2Zero();
     g_invader.radius = g_invader_start_radius;
 
+    ++g_difficulty;
+    ++g_game_round;
+
     const int x = (int)(g_world_bounds.width * 0.5f);
     const int y = (int)(g_world_bounds.height * 0.5f);
+    g_alive_clumpnuggets = g_game_round * g_additional_clumpnuggets_per_round;
     memset(g_clumpnuggets, 0, sizeof(g_clumpnuggets));
-    for(int i = 0; i < _countof(g_clumpnuggets); ++i)
+
+    for(int i = 0; i < g_alive_clumpnuggets; ++i)
     {
         g_clumpnuggets[i].position = (Vector2){(float)GetRandomValue(-x, x), (float)GetRandomValue(-y, y)};
         g_clumpnuggets[i].super_fast = GetRandomValue(0, 1000) < 300;
@@ -227,8 +234,6 @@ void InitializeGameSpecifics()
         g_food[i].consumed = false;
     }
     
-    ++g_difficulty;
-    ++g_game_round;
     g_target_radius = g_invader_start_radius * (float)g_difficulty;
     g_game_state = InGame;
     g_hunger_timer = g_hunger_timer_reset;
@@ -236,7 +241,7 @@ void InitializeGameSpecifics()
     g_next_round_timer = g_next_round_timer_reset;
     g_round_start_timer = 0.0f;
     g_food_consumed = 0;
-    g_background_color = ColorFromHSV(60.0f, 0.6f, 1.0f);//ColorFromHSV(fmodf(g_game_round * 60.0f, 360.0f), 0.6f, 1.0f);
+    g_background_color = ColorFromHSV(60.0f, 0.6f, 1.0f);
     g_attached_clumpnuggets = 0;
 }
 
@@ -326,7 +331,7 @@ void UpdateInvader(const float frame_time)
 
 void UpdateClumpnuggets(const float frame_time)
 {
-    for(int i = 0; i < _countof(g_clumpnuggets); ++i)
+    for(int i = 0; i < g_alive_clumpnuggets; ++i)
     {
         if(g_clumpnuggets[i].attached)
         {
@@ -370,7 +375,7 @@ void UpdateClumpnuggets(const float frame_time)
         }
 
         // clumpnuggets cant attach if there's already one attached at this spot
-        for(int j = 0; j < _countof(g_clumpnuggets); ++j)
+        for(int j = 0; j < g_alive_clumpnuggets; ++j)
         {
             if(!g_clumpnuggets[j].attached)
             {
@@ -398,7 +403,7 @@ void UpdateFood(const float frame_time)
         }
 
         // food can't be consumed if a clumpnugget is attached and in the way
-        for(int j = 0; j < _countof(g_clumpnuggets); ++j)
+        for(int j = 0; j < g_alive_clumpnuggets; ++j)
         {
             if(!g_clumpnuggets[j].attached)
             {
@@ -536,7 +541,7 @@ void RenderInvader()
 void RenderClumpnuggets()
 {
     const float rotation = 0.0f;
-    for(int i = 0; i < _countof(g_clumpnuggets); ++i)
+    for(int i = 0; i < g_alive_clumpnuggets; ++i)
     {
         const float period = 0.3f;
         const float frequency = (2.0f * PI) / period;
